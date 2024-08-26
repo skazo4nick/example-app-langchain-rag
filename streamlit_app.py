@@ -1,40 +1,24 @@
 import os
-import sys
 import streamlit as st
 import logging
-from dotenv import load_dotenv
-from pathlib import Path
-from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
-
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 from langchain_community.retrievers import BM25Retriever
-from langchain.chains import RetrievalQA
-from basic_chain import get_model
+from pathlib import Path
+from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
 
-# Override sqlite3 before importing langchain_chroma
-if 'pysqlite3' in sys.modules:
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# # Override sqlite3 before importing langchain_chroma
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 # from langchain_chroma import Chroma # Import Chroma from langchain_chroma
 
 from ensemble import ensemble_retriever_from_docs
 from full_chain import create_full_chain, ask_question
 from local_loader import load_data_files, load_file
-from vector_store import EmbeddingProxy
-from memory import clean_session_history, create_memory_chain  # Ensure this import is added
-from filter import create_retriever  # Import create_retriever from filter.py
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Get the environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
-
-openai_api_key = OPENAI_API_KEY
+from vector_store import EmbeddingProxy 
+from memory import clean_session_history
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,59 +47,67 @@ def show_ui(qa, prompt_to_user="How may I help you?"):
         with st.chat_message("user"):
             st.write(prompt)
 
-    response = None  # Initialize response to None
     if st.session_state.messages[-1]["role"] != "assistant":
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = ask_question(qa, st.session_state.messages[-1]["content"])
-        message_content = response["content"] if response and isinstance(response, dict) and "content" in response else response if response else "Error"
-        message = {"role": "assistant", "content": message_content}
+                try:
+                    session_id = get_script_run_ctx().session_id
+                    response = ask_question(qa, prompt, session_id)
+                    st.markdown(response.content)
+                except Exception as e:
+                    logging.error(f"Error during question answering: {e}")
+                    st.write("Sorry, there was an error processing your request.")
+        message = {"role": "assistant", "content": response.content if response else "Error"}
         st.session_state.messages.append(message)
 
 @st.cache_resource
-def get_retriever(openai_api_key=openai_api_key, data_dir="data"):
+def get_retriever(openai_api_key=None):
     """
     Creates and caches the document retriever.
 
     Args:
         openai_api_key: The OpenAI API key.
-        data_dir: The directory where data files are located.
 
     Returns:
         An ensemble document retriever.
     """
     try:
-        docs = load_data_files(data_dir=data_dir)
-        retriever = create_retriever(docs, openai_api_key=openai_api_key)
-        return retriever
+        docs = load_data_files(data_dir="data")  
+        # embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-small")
+        embeddings = HuggingFaceEmbeddings()
+        return ensemble_retriever_from_docs(docs, embeddings=embeddings)
     except Exception as e:
         logging.error(f"Error creating retriever: {e}")
-        st.error("Error initializing the retriever. Please check the logs.")
-        st.stop()
+        logging.exception(f"message")
+        st.error("Error initializing the application. Please check the logs.")
+        st.stop()  # Stop execution if retriever creation fails
 
-def get_chain(openai_api_key=openai_api_key, data_dir="data"):
+
+def get_chain(openai_api_key=None, huggingfacehub_api_token=None):
     """
     Creates the question answering chain.
 
     Args:
         openai_api_key: The OpenAI API key.
-        data_dir: The directory where data files are located.
+        huggingfacehub_api_token: The Hugging Face Hub API token.
 
     Returns:
         A LangChain question answering chain.
     """
     try:
         logging.info('Start creating chain')
-        retriever = get_retriever(openai_api_key=openai_api_key, data_dir=data_dir)
-        llm = get_model(openai_api_key=openai_api_key)
-        chain = RetrievalQA.from_chain_type(llm=llm, chain_type='stuff', retriever=retriever)
+        ensemble_retriever = get_retriever(openai_api_key=openai_api_key)
+        chain = create_full_chain(
+            ensemble_retriever,
+            openai_api_key=openai_api_key,
+        )
         logging.info('Chain creating complete')
-        return chain
+        return ensemble_retriever, chain
     except Exception as e:
         logging.error(f"Error creating chain: {e}")
-        logging.exception("message")
+        logging.exception(f"message")
         st.error("Error initializing the application. Please check the logs.")
-        st.stop()
+        st.stop()  # Stop execution if chain creation fails
 
 def get_secret_or_input(secret_key, secret_name, info_link=None):
     """
@@ -138,8 +130,9 @@ def get_secret_or_input(secret_key, secret_name, info_link=None):
         if secret_value:
             st.session_state[secret_key] = secret_value
         if info_link:
-            st.markdown(f"[More info]({info_link})")
+            st.markdown(f"[Get an {secret_name}]({info_link})")
     return secret_value
+
 
 def reset(prompt_to_user="How may I help you?"):
     session_id = get_script_run_ctx().session_id
@@ -153,32 +146,52 @@ def run():
     ready = True
     openai_api_key = st.session_state.get("OPENAI_API_KEY")
     huggingfacehub_api_token = st.session_state.get("HUGGINGFACEHUB_API_TOKEN")
-    data_dir = "data"  # Set the correct path to your data directory
 
-    with st.sidebar:
-        if not openai_api_key:
-            openai_api_key = get_secret_or_input("OPENAI_API_KEY", "OpenAI API Key", "https://platform.openai.com/account/api-keys")
-        if not huggingfacehub_api_token:
-            huggingfacehub_api_token = get_secret_or_input("HUGGINGFACEHUB_API_TOKEN", "Hugging Face Hub API Token", "https://huggingface.co/settings/tokens")
+    # with st.sidebar:
+    #     if not openai_api_key:
+    #         openai_api_key = get_secret_or_input(
+    #             'OPENAI_API_KEY',
+    #             "OpenAI API key",
+    #             info_link="https://platform.openai.com/account/api-keys"
+    #         )
+    #     if not huggingfacehub_api_token:
+    #         huggingfacehub_api_token = get_secret_or_input(
+    #             'HUGGINGFACEHUB_API_TOKEN',
+    #             "HuggingFace Hub API Token",
+    #             info_link="https://huggingface.co/docs/huggingface_hub/main/en/quick-start#authentication"
+    #         )
 
-        if not openai_api_key:
-            st.error("OpenAI API Key is required.")
-            ready = False
-        if not huggingfacehub_api_token:
-            st.error("Hugging Face Hub API Token is required.")
-            ready = False
+    # if not openai_api_key:
+    #     st.warning("Missing OPENAI_API_KEY")
+    #     ready = False
+    # if not huggingfacehub_api_token:
+    #     st.warning("Missing HUGGINGFACEHUB_API_TOKEN")
+    #     ready = False
+
+    openai_api_key = os.getenv('OPEN_API_KEY')
 
     if ready:
+        # try:
         logging.info('run loop')
 
         if not st.session_state.get('init', False):
+            st.session_state['ensemble_retriever'], st.session_state['chain'] = get_chain(
+                openai_api_key=openai_api_key,
+                huggingfacehub_api_token=huggingfacehub_api_token
+            )
             st.session_state['init'] = True
-            reset()
 
-        chain = get_chain(openai_api_key=openai_api_key, data_dir=data_dir)
-        show_ui(chain)
+        # Chat Interface
+        st.title("Equity Bank's Assistant")
+        st.caption("The artificial intelligence application was trained on a selection of publicly available documents from the bank's website over a period of three days. Notably, the accuracy of its responses can be further enhanced with access to additional training materials.")
+        st.subheader("Enquire about our range of Equity Bank products and services:")
+        show_ui(st.session_state['chain'], "How can I assist you today?")
+        st.button("Reset history", on_click=reset)
+
+        # except Exception as e:
+        #     logging.error(f"Error initializing application: {e}")
+        #     st.error("Error initializing the application. Please check the logs.")
     else:
-        st.error("Please provide the required API keys to proceed.")
+        st.stop()
 
-if __name__ == "__main__":
-    run()
+run()

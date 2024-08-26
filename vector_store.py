@@ -1,8 +1,10 @@
 import logging
 import os
 from typing import List
+import shutil
 
-from langchain_openai import OpenAIEmbeddings
+# from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from local_loader import load_data_files
 from splitter import split_documents
@@ -33,12 +35,18 @@ def create_vector_db(texts, embeddings=None, collection_name="chroma"):
     # Select embeddings
     if not embeddings:
         openai_api_key = os.environ["OPENAI_API_KEY"]
-        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-small")
+        # embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-small")
+        embeddings = HuggingFaceEmbeddings()
 
     proxy_embeddings = EmbeddingProxy(embeddings)
+
+    persist_directory = os.path.join("store/", collection_name)
+    if os.path.exists(persist_directory):
+        shutil.rmtree(persist_directory)
+
     db = Chroma(collection_name=collection_name,
                 embedding_function=proxy_embeddings,
-                persist_directory=os.path.join("store/", collection_name))
+                persist_directory=persist_directory)
     try:
         db.add_documents(texts)
     except Exception as e:

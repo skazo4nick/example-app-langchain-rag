@@ -10,7 +10,6 @@ from rag_chain import make_rag_chain
 from remote_loader import load_web_page
 from splitter import split_documents
 from vector_store import create_vector_db
-from remote_loader import load_online_pdf  # Import load_online_pdf
 from dotenv import load_dotenv
 
 
@@ -22,7 +21,7 @@ def ensemble_retriever_from_docs(docs, embeddings=None):
     bm25_retriever = BM25Retriever.from_texts([t.page_content for t in texts])
 
     # tavily_retriever = TavilySearchAPIRetriever(k=3, include_domains=['https://ilibrary.ru/text/107'])
-    tavily_retriever = MyTavilySearchAPIRetriever(k=3, include_domains=['https://equitygroupholdings.com/ke'])
+    tavily_retriever = MyTavilySearchAPIRetriever(k=3, include_domains=['https://equitygroupholdings.com'])
 
     ensemble_retriever = EnsembleRetriever(
         retrievers=[bm25_retriever, vs_retriever, tavily_retriever],
@@ -45,16 +44,13 @@ class MyTavilySearchAPIRetriever(TavilySearchAPIRetriever):
 def main():
     load_dotenv()
 
-    equity_bank_annual_report_2022 = "https://equitygroupholdings.com/ke/uploads/Equity-Investment-Bank-2022-Annual-Report.pdf"
-    
-    # Use load_online_pdf to load the PDF directly
-    docs = load_online_pdf(equity_bank_annual_report_2022)  
-    
+    problems_of_philosophy_by_russell = "https://www.gutenberg.org/ebooks/5827.html.images"
+    docs = load_web_page(problems_of_philosophy_by_russell)
     ensemble_retriever = ensemble_retriever_from_docs(docs)
     model = get_model("ChatGPT")
     chain = make_rag_chain(model, ensemble_retriever) | StrOutputParser()
 
-    result = chain.invoke("What are the key findings of Equity Bank Annual Report?")
+    result = chain.invoke("What are the key problems of philosophy according to Russell?")
     print(result)
 
 

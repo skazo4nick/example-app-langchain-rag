@@ -14,45 +14,46 @@ from rag_chain import make_rag_chain
 # Configure logging 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def create_full_chain(retriever, openai_api_key=None, chat_memory=ChatMessageHistory()):
-    try:
-        model = get_model("ChatGPT", openai_api_key=openai_api_key)
-        system_prompt = """You are a helpful and knowledgeable financial consultant. 
-        Use the provided context from Equity Bank's products and services to answer the user's questions. 
-        If you cannot find an answer in the context, inform the user that you need more information or that the question is outside your expertise. 
+def create_full_chain(retriever, openai_api_key=None):
+    # try:
+    model = get_model("ChatGPT", openai_api_key=openai_api_key)
+    system_prompt = """You are a helpful and knowledgeable financial consultant. 
+    Use the provided context from Equity Bank's products and services to answer the user's questions. 
+    If you cannot find an answer in the context, inform the user that you need more information or that the question is outside your expertise. 
 
-        Context: {context}
+    Context: {context}
 
-        Question: """
+    Question: """
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                ("human", "{question}"),
-            ]
-        )
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            ("human", "{question}"),
+        ]
+    )
 
-        rag_chain = make_rag_chain(model, retriever, rag_prompt=prompt)
-        chain = create_memory_chain(model, rag_chain, chat_memory)
-        return chain
-    except Exception as e:
-        logging.error(f"Error creating full chain: {e}")
-        # Handle the error:
-        # - You could return a simpler chain or a default response
-        # - Raise an exception to stop execution
+    rag_chain = make_rag_chain(model, retriever, rag_prompt=prompt)
+    chain = create_memory_chain(model, rag_chain)
+    return chain
+    # except Exception as e:
+    #     logging.error(f"Error creating full chain: {e}")
+    #     # Handle the error:
+    #     # - You could return a simpler chain or a default response
+    #     # - Raise an exception to stop execution
 
 
-def ask_question(chain, query):
-    try:
-        response = chain.invoke(
-            {"question": query},
-            config={"configurable": {"session_id": "foo"}}
-        )
-        return response
-    except Exception as e:
-        logging.error(f"Error asking question: {e}")
-        # Return a consistent response format with an error message
-        return {"content": "Sorry, there was an error processing your request."}
+def ask_question(chain, query, session_id):
+    # try:
+    # logging.info(f"Send request from session {session_id}: {query}")
+    response = chain.invoke(
+        {"question": query},
+        config={"configurable": {"session_id": session_id}}
+    )
+    return response
+    # except Exception as e:
+    #     logging.error(f"Error asking question: {e}")
+    #     # Handle the error, e.g., return an error message
+    #     return "Sorry, there was an error processing your request."
 
 
 def main():

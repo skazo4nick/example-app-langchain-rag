@@ -51,8 +51,8 @@ def ask_question(chain, query):
         return response
     except Exception as e:
         logging.error(f"Error asking question: {e}")
-        # Handle the error, e.g., return an error message
-        return "Sorry, there was an error processing your request."
+        # Return a consistent response format with an error message
+        return {"content": "Sorry, there was an error processing your request."}
 
 
 def main():

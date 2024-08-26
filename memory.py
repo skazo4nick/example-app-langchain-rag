@@ -13,9 +13,13 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from basic_chain import get_model
 from rag_chain import make_rag_chain
+import logging
 
+store = {}
 
-def create_memory_chain(llm, base_chain, chat_memory):
+import json
+
+def create_memory_chain(llm, base_chain):
     contextualize_q_system_prompt = """Given a chat history and the latest user question \
         which might reference context in the chat history, formulate a standalone question \
         which can be understood without the chat history. Do NOT answer the question, \
@@ -32,7 +36,10 @@ def create_memory_chain(llm, base_chain, chat_memory):
     runnable = contextualize_q_prompt | llm | base_chain
 
     def get_session_history(session_id: str) -> BaseChatMessageHistory:
-        return chat_memory
+        if session_id not in store:
+            store[session_id] = ChatMessageHistory()
+
+        return store[session_id]
 
     with_message_history = RunnableWithMessageHistory(
         runnable,
@@ -41,6 +48,10 @@ def create_memory_chain(llm, base_chain, chat_memory):
         history_messages_key="chat_history",
     )
     return with_message_history
+
+def clean_session_history(session_id):
+    global store
+    store[session_id] = ChatMessageHistory()
 
 
 class SimpleTextRetriever(BaseRetriever):
@@ -67,7 +78,7 @@ def main():
     model = get_model("ChatGPT")
     chat_memory = ChatMessageHistory()
 
-    system_prompt = "You are a helpful AI assistant for busy professionals trying to improve their health."
+    system_prompt = "You are a helpful AI assistant for busy professionals trying to improve their financials."
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
@@ -82,8 +93,8 @@ def main():
     rag_chain = make_rag_chain(model, retriever, rag_prompt=None)
     chain = create_memory_chain(model, rag_chain, chat_memory) | StrOutputParser()
     queries = [
-        "What do I need to get from the grocery store besides milk?",
-        "Which of these items can I find at a farmer's market?",
+        "What do I need to get from bank",
+        "Which of these services can I find at a banks's app?",
     ]
 
     for query in queries:

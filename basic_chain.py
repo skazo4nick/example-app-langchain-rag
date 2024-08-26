@@ -14,6 +14,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 MISTRAL_ID = "mistralai/Mistral-7B-Instruct-v0.1"
 ZEPHYR_ID = "HuggingFaceH4/zephyr-7b-beta"
 
+
+
 def get_model(repo_id="ChatGPT", **kwargs):
     """
     Loads and configures the specified language model.
@@ -29,7 +31,12 @@ def get_model(repo_id="ChatGPT", **kwargs):
         if repo_id == "ChatGPT":
             model_name = kwargs.get("model_name", "gpt-4o-mini")
             logging.info(f"Loading OpenAI model: {model_name}")
-            chat_model = ChatOpenAI(temperature=0, model=model_name, **kwargs)
+            chat_model = ChatOpenAI(
+                openai_api_key=kwargs.get("openai_api_key", None),
+                base_url="https://api.openai.com/v1",
+                model=model_name,
+                temperature=0
+            )
         else:
             logging.info(f"Loading Hugging Face model: {repo_id}")
             huggingfacehub_api_token = kwargs.get("HUGGINGFACEHUB_API_TOKEN", None)

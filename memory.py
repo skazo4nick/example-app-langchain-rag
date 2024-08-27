@@ -78,7 +78,7 @@ def main():
     model = get_model("ChatGPT")
     chat_memory = ChatMessageHistory()
 
-    system_prompt = "You are a helpful AI assistant for busy professionals trying to improve their health."
+    system_prompt = "You are a helpful AI assistant for busy professionals trying to improve their financials."
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
@@ -93,8 +93,8 @@ def main():
     rag_chain = make_rag_chain(model, retriever, rag_prompt=None)
     chain = create_memory_chain(model, rag_chain, chat_memory) | StrOutputParser()
     queries = [
-        "What do I need to get from the grocery store besides milk?",
-        "Which of these items can I find at a farmer's market?",
+        "What do I need to get from the bank?",
+        "Which of these services can I find at a local bank branch?",
     ]
 
     for query in queries:

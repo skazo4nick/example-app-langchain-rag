@@ -6,7 +6,7 @@ from langchain.memory import ChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate
 
 from basic_chain import get_model
-from filter import ensemble_retriever_from_docs
+from ensemble import ensemble_retriever_from_docs
 from local_loader import load_data_files
 from memory import create_memory_chain
 from rag_chain import make_rag_chain
